@@ -1,4 +1,6 @@
 streamlit
 google-cloud-firestore
-pandas
 pytz
+streamlit-local-storage
+uuid
+pandas
