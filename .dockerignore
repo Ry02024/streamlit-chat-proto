@@ -1,0 +1,12 @@
+.git
+.gitignore
+.vscode/
+.devcontainer/
+__pycache__/
+*.pyc
+venv/
+.venv/
+.secrets/
+Dockerfile
+.dockerignore
+# その他不要なファイル
