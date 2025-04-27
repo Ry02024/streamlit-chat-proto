@@ -13,6 +13,18 @@ DEFAULT_ROLE = AGENT
 
 st.title("チャット (自分と相手)") # タイトルは元に戻す
 
+# Firestoreクライアントの初期化 (環境変数方式 - Cloud Run向け)
+try:
+    # 環境変数があれば引数なしで初期化できる
+    db = firestore.Client()
+    # st.success("Firestore接続成功 (Cloud Run)") # 必要に応じてデバッグ表示
+except Exception as e:
+    st.error(f"Firestoreクライアントの初期化に失敗 (Cloud Run): {e}")
+    # 環境変数が設定されているか確認
+    cred_path_env = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
+    st.info(f"環境変数 GOOGLE_APPLICATION_CREDENTIALS: {cred_path_env}")
+    st.stop()
+
 # 2. Firestoreクライアントの初期化 (Secrets分離方式)
 try:
     firestore_creds_dict = st.secrets["firestore_credentials"].to_dict()
