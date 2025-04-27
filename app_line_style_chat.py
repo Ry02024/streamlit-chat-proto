@@ -14,23 +14,14 @@ DEFAULT_ROLE = AGENT
 st.title("チャット (自分と相手)") # タイトルは元に戻す
 
 # 2. Firestoreクライアントの初期化 (Secrets分離方式)
-st.write("--- Secretsの内容確認 (分離方式) ---") # デバッグ用
 try:
     firestore_creds_dict = st.secrets["firestore_credentials"].to_dict()
-    st.write("Credentials (excluding private key):") # デバッグ用
-    st.json({k: v for k, v in firestore_creds_dict.items() if k != 'private_key'}) # デバッグ用
 
     private_key_value = st.secrets["GCP_PRIVATE_KEY"]
-    # st.write("Raw Private Key Value:") # デバッグ用
-    # st.text(private_key_value) # デバッグ用
 
     formatted_private_key = private_key_value.replace('\\n', '\n')
-    # st.write("Formatted Private Key (first 100 chars):") # デバッグ用
-    # st.text(formatted_private_key[:100] + "...") # デバッグ用
 
     firestore_creds_dict["private_key"] = formatted_private_key
-    st.write("--- 最終的な認証情報辞書 (private_key含む) ---") # デバッグ用
-    st.json({k: (v[:20] + "..." if k == "private_key" else v) for k, v in firestore_creds_dict.items()}) # デバッグ用
 
     db = firestore.Client.from_service_account_info(firestore_creds_dict)
     st.success("Firestore接続成功 (Secrets 分離)") # 成功したら表示
