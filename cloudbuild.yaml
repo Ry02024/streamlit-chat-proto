@@ -6,14 +6,14 @@ steps:
         'build',
         '-t',
         # ↓↓↓ イメージ名を自分の環境に合わせて変更 ↓↓↓
-        'asia-northeast1-docker.pkg.dev/$PROJECT_ID/streamlit-apps/chat-app:latest',
+        'asia-northeast1-docker.pkg.dev/streamlit-chat-proto/streamlit-apps/chat-app:latest',
         '.'
       ]
     id: 'Build'
 
   # ステップ2: ビルドしたイメージを Artifact Registry にプッシュ
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/streamlit-apps/chat-app:latest']
+    args: ['push', 'asia-northeast1-docker.pkg.dev/streamlit-chat-proto/streamlit-apps/chat-app:latest']
     id: 'Push'
     waitFor: ['Build'] # Build ステップの完了を待つ
 
@@ -26,7 +26,7 @@ steps:
         # ↓↓↓ Cloud Run サービス名を指定 ↓↓↓
         'streamlit-chat',
         # ↓↓↓ ビルドしたイメージ名を指定 ↓↓↓
-        '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/streamlit-apps/chat-app:latest',
+        '--image=asia-northeast1-docker.pkg.dev/streamlit-chat-proto/streamlit-apps/chat-app:latest',
         # ↓↓↓ リージョンを指定 ↓↓↓
         '--region=asia-northeast1',
         '--platform=managed',
@@ -46,4 +46,4 @@ steps:
 
 # ビルド成果物としてイメージを指定
 images:
-  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/streamlit-apps/chat-app:latest'
+  - 'asia-northeast1-docker.pkg.dev/streamlit-chat-proto/streamlit-apps/chat-app:latest'
