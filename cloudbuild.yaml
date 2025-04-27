@@ -1,59 +1,55 @@
 steps:
-# ステップ1: Dockerイメージをビルド
-- name: 'gcr.io/cloud-builders/docker'
-  args: [
-      'build',
-      '-t',
-      # ↓↓↓ イメージ名を自分の環境に合わせる ↓↓↓
-      'asia-northeast1-docker.pkg.dev/streamlit-chat-proto/streamlit-apps/chat-app:latest',
-      '.' # Dockerfileがあるディレクトリ
-    ]
-  id: 'Build'
+  # ステップ1: Dockerイメージのビルド
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+        'build',
+        '-t',
+        # ★ Artifact Registry パス (リージョン, プロジェクトID, リポジトリ名 は設定が必要な場合が多い) ★
+        # リージョンは省略可能だが明示推奨。PROJECT_IDは自動置換される。
+        # リポジトリ名、イメージ名は自分で決める必要がある。
+        'asia-northeast1-docker.pkg.dev/$PROJECT_ID/streamlit-apps/chat-app:$COMMIT_SHA', # タグにコミットSHAを使う例
+        '.'
+      ]
+    id: 'Build'
 
-# ステップ2: ビルドしたイメージを Artifact Registry にプッシュ
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'asia-northeast1-docker.pkg.dev/streamlit-chat-proto/streamlit-apps/chat-app:latest']
-  id: 'Push'
-  waitFor: ['Build']
+  # ステップ2: Artifact Registry へのイメージプッシュ
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/streamlit-apps/chat-app:$COMMIT_SHA']
+    id: 'Push'
+    waitFor: ['Build']
 
-# ステップ3: Cloud Run にデプロイ
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest'
-  entrypoint: gcloud
-  args: [
-      'run', 'deploy',
-      # ↓↓↓ Cloud Run サービス名を指定 ↓↓↓
-      'streamlit-chat',
-      # ↓↓↓ ビルドしたイメージ名を指定 ↓↓↓
-      '--image=asia-northeast1-docker.pkg.dev/streamlit-chat-proto/streamlit-apps/chat-app:latest',
-      # ↓↓↓ リージョンを指定 ↓↓↓
-      '--region=asia-northeast1',
-      '--platform=managed',
-      '--allow-unauthenticated',
-      # ↓↓↓ Secret Managerからマウントする設定 ↓↓↓
-      '--set-secrets=/secrets/sa-key.json=firestore-sa-key:latest',
-      # ↓↓↓ 環境変数を設定 ↓↓↓
-      '--set-env-vars=GOOGLE_APPLICATION_CREDENTIALS=/secrets/sa-key.json',
-      # ↓↓↓ スケーリング設定 (無料枠向け) ↓↓↓
-      '--min-instances=0',
-      '--max-instances=1',
-      # ↓↓↓ 使用するサービスアカウントを指定 (重要) ↓↓↓
-      # デフォルトのCloud Build SAを使う場合は、そのメアドを指定するか、この行を削除
-      '--service-account=1098493834184@cloudbuild.gserviceaccount.com'
-      # または、特定のSAを使いたい場合はそのメアド
-      # '--service-account=firestore-streamlit-access@streamlit-chat-proto.iam.gserviceaccount.com' # ← 例: Firestore用のSAを使う場合
-    ]
-  id: 'Deploy'
-  waitFor: ['Push']
+  # ステップ3: Cloud Run へのデプロイ
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest'
+    entrypoint: gcloud
+    args: [
+        'run', 'deploy',
+        # ★ サービス名 (自分で決める必要あり) ★
+        'streamlit-chat',
+        # ★ イメージ名 (ステップ1, 2 と合わせる) ★
+        '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/streamlit-apps/chat-app:$COMMIT_SHA',
+        # ★ リージョン (省略可能だが明示推奨) ★
+        '--region=asia-northeast1',
+        '--platform=managed',
+        '--allow-unauthenticated',
+        # ★ Secret名 (自分で決めたものを指定) ★
+        '--set-secrets=/secrets/sa-key.json=firestore-sa-key:latest',
+        # 環境変数とマウントパス
+        '--set-env-vars=GOOGLE_APPLICATION_CREDENTIALS=/secrets/sa-key.json',
+        # スケーリング設定
+        '--min-instances=0',
+        '--max-instances=1',
+        # ★ サービスアカウント (省略可能、省略時はCompute EngineデフォルトSA) ★
+        # 推奨: '--service-account=$PROJECT_NUMBER@cloudbuild.gserviceaccount.com'
+        # $PROJECT_NUMBER は自動置換される組み込み変数
+        '--service-account=$PROJECT_NUMBER@cloudbuild.gserviceaccount.com'
+      ]
+    id: 'Deploy'
+    waitFor: ['Push']
 
-# ビルド成果物としてイメージを指定
+# ビルド成果物のイメージ名
 images:
-  - 'asia-northeast1-docker.pkg.dev/streamlit-chat-proto/streamlit-apps/chat-app:latest'
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/streamlit-apps/chat-app:$COMMIT_SHA'
 
-# (オプション) ロギング設定（通常はデフォルトでCloud Loggingが使われるはず）
+# (オプション) ログ設定
 # options:
 #   logging: CLOUD_LOGGING_ONLY
-```    *   **`cloudbuild.yaml` 内の注意点:**
-    *   イメージ名、Cloud Runサービス名、リージョン、Secret名 (`firestore-sa-key`) を **自分の環境に合わせて正確に設定** してください。
-    *   **`--service-account` 引数:** Cloud Run サービスが動作する際に使用するサービスアカウントを指定します。
-        *   **推奨:** Cloud Build サービスアカウント (`[プロジェクト番号]@cloudbuild.gserviceaccount.com`) を指定するか、この行を**削除**してデフォルト（Compute Engine デフォルト SA）を使わせる（ただし権限注意）。
-        *   **あるいは:** Firestore アクセス用に作成したサービスアカウント (`firestore-streamlit-access@...`) を指定することも可能ですが、その場合はそのサービスアカウントに Cloud Run 起動に必要な権限 (例: `roles/run.invoker`) も追加で必要になる場合があります。まずは Cloud Build SA を使うか、指定しない方法で試すのが簡単です。
