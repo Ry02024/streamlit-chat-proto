@@ -2,7 +2,7 @@
 import streamlit as st
 from google.cloud import firestore
 import datetime
-import os
+import os, json
 import pytz
 import re # インデックスURL抽出用
 
@@ -13,12 +13,10 @@ DEFAULT_ROLE = AGENT
 
 # 2. Firestoreクライアントの初期化 (Streamlit Cloud Secretsを使用)
 try:
-    # 別のSecretから private_key 文字列を取得
-    private_key_value = st.secrets["GCP_PRIVATE_KEY"]
-    # ★重要★: Secretsから取得した文字列内のリテラルな "\\n" を実際の改行 "\n" に置換
-    formatted_private_key = private_key_value.replace('\\n', '\n')
-    # 取得した private_key を辞書に追加
-    firestore_creds_dict["private_key"] = formatted_private_key
+    # Streamlit Cloud の Secrets に "firestore_credentials" という名前で
+    # サービスアカウントキーのJSON内容全体を登録した場合
+    # st.secrets は辞書のようにアクセスできる
+    firestore_creds_dict = st.secrets["firestore_credentials"]
 
     # google-cloud-firestore は辞書から直接クライアントを初期化できる
     db = firestore.Client.from_service_account_info(firestore_creds_dict)
@@ -26,13 +24,23 @@ try:
     st.sidebar.success("Firestore接続成功 (Secrets)") # デバッグ用
 
 except KeyError:
-    st.error("Streamlit Cloud Secrets に 'firestore_credentials' が設定されていません。")
+    st.error("Secretsに 'firestore_credentials' が見つかりません！")
     st.stop()
-except Exception as e:
-    st.error(f"Firestoreクライアントの初期化に失敗 (Secrets): {e}")
+except Exception as secrets_e:
+    st.error(f"Secrets読み込み中にエラー: {secrets_e}")
     st.stop()
 
-# ... (以降のコードは同じ) ...
+# --- Firestoreクライアント初期化の本処理 ---
+try:
+    # st.secretsから直接ではなく、上で取得した変数を使う（より安全）
+    db = firestore.Client.from_service_account_info(firestore_creds_debug)
+    st.sidebar.success("Firestore接続成功 (Secrets)")
+
+except Exception as e:
+    st.error(f"Firestoreクライアントの初期化に失敗 (Secrets): {e}")
+    # エラーが出た場合、再度Secretsの内容を表示してみるのも手
+    st.write("エラー発生時のSecrets内容:", st.secrets.get("firestore_credentials", "キーが存在しません"))
+    st.stop()
 
 # --- カスタムCSSの定義 ---
 # st.markdownを使ってCSSを注入
