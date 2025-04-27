@@ -13,10 +13,12 @@ DEFAULT_ROLE = AGENT
 
 # 2. Firestoreクライアントの初期化 (Streamlit Cloud Secretsを使用)
 try:
-    # Streamlit Cloud の Secrets に "firestore_credentials" という名前で
-    # サービスアカウントキーのJSON内容全体を登録した場合
-    # st.secrets は辞書のようにアクセスできる
-    firestore_creds_dict = st.secrets["firestore_credentials"]
+    # 別のSecretから private_key 文字列を取得
+    private_key_value = st.secrets["GCP_PRIVATE_KEY"]
+    # ★重要★: Secretsから取得した文字列内のリテラルな "\\n" を実際の改行 "\n" に置換
+    formatted_private_key = private_key_value.replace('\\n', '\n')
+    # 取得した private_key を辞書に追加
+    firestore_creds_dict["private_key"] = formatted_private_key
 
     # google-cloud-firestore は辞書から直接クライアントを初期化できる
     db = firestore.Client.from_service_account_info(firestore_creds_dict)
