@@ -1,0 +1,10 @@
+# .gitignore の内容例
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.env
+# 注意: Codespaces Secrets を使うので、キーファイル自体はコミットしない
+# もし誤ってコミットしそうな場所に置くなら下記も追加
+# .secrets/
+# *.json
