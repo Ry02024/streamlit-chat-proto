@@ -5,239 +5,204 @@ import datetime
 import os, json
 import pytz
 import re # インデックスURL抽出用
-import streamlit as st
-import os # 他のimportも残しておく
 
-st.title("Secrets 読み込みテスト")
+# --- 固定ユーザー名の定義 ---
+AGENT = "担当者"
+VISITOR = "訪問者"
+DEFAULT_ROLE = AGENT
 
-st.write("--- Secrets 読み込み開始 ---")
+st.title("チャット (自分と相手)") # タイトルは元に戻す
+
+# 2. Firestoreクライアントの初期化 (Secrets分離方式)
+st.write("--- Secretsの内容確認 (分離方式) ---") # デバッグ用
 try:
-    # トップレベルのキーを読み込む
-    simple_message = st.secrets["test_message"]
-    st.success(f"トップレベルのキーを読み込み成功: {simple_message}")
+    firestore_creds_dict = st.secrets["firestore_credentials"].to_dict()
+    st.write("Credentials (excluding private key):") # デバッグ用
+    st.json({k: v for k, v in firestore_creds_dict.items() if k != 'private_key'}) # デバッグ用
 
-    # テーブル内のキーを読み込む
-    section_data = st.secrets["test_section"]
-    item1_value = section_data["item1"]
-    item2_value = section_data.item2 # ドットアクセスも可能
-    st.success(f"テーブル内のキーを読み込み成功: item1={item1_value}, item2='{item2_value}'")
+    private_key_value = st.secrets["GCP_PRIVATE_KEY"]
+    # st.write("Raw Private Key Value:") # デバッグ用
+    # st.text(private_key_value) # デバッグ用
 
-    # 存在しないキーへのアクセス（エラーになるはず）
-    try:
-        non_existent = st.secrets["invalid_key"]
-    except KeyError:
-        st.info("存在しないキーで KeyError が発生するのは正常です。")
+    formatted_private_key = private_key_value.replace('\\n', '\n')
+    # st.write("Formatted Private Key (first 100 chars):") # デバッグ用
+    # st.text(formatted_private_key[:100] + "...") # デバッグ用
+
+    firestore_creds_dict["private_key"] = formatted_private_key
+    st.write("--- 最終的な認証情報辞書 (private_key含む) ---") # デバッグ用
+    st.json({k: (v[:20] + "..." if k == "private_key" else v) for k, v in firestore_creds_dict.items()}) # デバッグ用
+
+    db = firestore.Client.from_service_account_info(firestore_creds_dict)
+    st.success("Firestore接続成功 (Secrets 分離)") # 成功したら表示
 
 except KeyError as ke:
-    st.error(f"Secrets キー '{ke}' が見つかりません！ TOML設定を確認してください。")
+    st.error(f"Streamlit Cloud Secrets にキー '{ke}' が設定されていません。TOML設定を確認してください。")
+    st.stop()
 except Exception as e:
-    st.error(f"Secrets 読み込み中に予期せぬエラー: {e}")
+    st.error(f"Firestoreクライアントの初期化に失敗 (Secrets 分離): {e}")
+    st.stop()
 
-st.write("--- Secrets 読み込み終了 ---")
+# --- カスタムCSSの定義 ---
+# st.markdownを使ってCSSを注入
+st.markdown("""
+<style>
+/* チャットメッセージ全体を囲むコンテナ */
+.message-container {
+    width: 100%;
+    margin-bottom: 10px;
+    display: flex; /* Flexboxを使って左右寄せを制御 */
+}
 
-# # --- 固定ユーザー名の定義 ---
-# AGENT = "担当者"
-# VISITOR = "訪問者"
-# DEFAULT_ROLE = AGENT
+/* メッセージバブルの基本スタイル */
+.message-bubble {
+    max-width: 75%; /* メッセージが長すぎないように */
+    padding: 10px 15px;
+    border-radius: 18px;
+    word-wrap: break-word; /* 長い単語を折り返す */
+    position: relative; /* タイムスタンプの位置調整用 */
+}
 
-# # 2. Firestoreクライアントの初期化 (Streamlit Cloud Secretsを使用)
-# try:
-#     # Streamlit Cloud の Secrets に "firestore_credentials" という名前で
-#     # サービスアカウントキーのJSON内容全体を登録した場合
-#     # st.secrets は辞書のようにアクセスできる
-#     firestore_creds_dict = st.secrets["firestore_credentials"]
+/* 自分のメッセージ用コンテナ (右寄せ) */
+.my-message-container {
+    justify-content: flex-end; /* Flexアイテムを右端に寄せる */
+}
 
-#     # 別のSecretから private_key 文字列を取得
-#     private_key_value = st.secrets["GCP_PRIVATE_KEY"]
-#     # ★重要★: Secretsから取得した文字列内のリテラルな "\\n" を実際の改行 "\n" に置換
-#     formatted_private_key = private_key_value.replace('\\n', '\n')
-#     # 取得した private_key を辞書に追加
-#     firestore_creds_dict["private_key"] = formatted_private_key
-#     # google-cloud-firestore は辞書から直接クライアントを初期化できる
-#     db = firestore.Client.from_service_account_info(firestore_creds_dict)
+/* 自分のメッセージバブル */
+.my-message-bubble {
+    background-color: #77c7ff; /* 明るい青色 (例) */
+    color: black;
+    border-bottom-right-radius: 5px; /* 右下の角を少し変える */
+}
 
-#     st.sidebar.success("Firestore接続成功 (Secrets)") # デバッグ用
+/* 相手のメッセージ用コンテナ (左寄せ) - デフォルトのflex */
+.their-message-container {
+     justify-content: flex-start; /* デフォルト */
+}
 
-# except KeyError:
-#     st.error("Secretsに 'firestore_credentials' が見つかりません！")
-#     st.stop()
-# except Exception as secrets_e:
-#     st.error(f"Secrets読み込み中にエラー: {secrets_e}")
-#     st.stop()
+/* 相手のメッセージバブル */
+.their-message-bubble {
+    background-color: #f0f0f0; /* 明るい灰色 (例) */
+    color: black;
+    border-bottom-left-radius: 5px; /* 左下の角を少し変える */
+}
 
-# # --- Firestoreクライアント初期化の本処理 ---
-# try:
-#     # st.secretsから直接ではなく、上で取得した変数を使う（より安全）
-#     db = firestore.Client.from_service_account_info(firestore_creds_debug)
-#     st.sidebar.success("Firestore接続成功 (Secrets)")
-
-# except Exception as e:
-#     st.error(f"Firestoreクライアントの初期化に失敗 (Secrets): {e}")
-#     # エラーが出た場合、再度Secretsの内容を表示してみるのも手
-#     st.write("エラー発生時のSecrets内容:", st.secrets.get("firestore_credentials", "キーが存在しません"))
-#     st.stop()
-
-# # --- カスタムCSSの定義 ---
-# # st.markdownを使ってCSSを注入
-# st.markdown("""
-# <style>
-# /* チャットメッセージ全体を囲むコンテナ */
-# .message-container {
-#     width: 100%;
-#     margin-bottom: 10px;
-#     display: flex; /* Flexboxを使って左右寄せを制御 */
-# }
-
-# /* メッセージバブルの基本スタイル */
-# .message-bubble {
-#     max-width: 75%; /* メッセージが長すぎないように */
-#     padding: 10px 15px;
-#     border-radius: 18px;
-#     word-wrap: break-word; /* 長い単語を折り返す */
-#     position: relative; /* タイムスタンプの位置調整用 */
-# }
-
-# /* 自分のメッセージ用コンテナ (右寄せ) */
-# .my-message-container {
-#     justify-content: flex-end; /* Flexアイテムを右端に寄せる */
-# }
-
-# /* 自分のメッセージバブル */
-# .my-message-bubble {
-#     background-color: #77c7ff; /* 明るい青色 (例) */
-#     color: black;
-#     border-bottom-right-radius: 5px; /* 右下の角を少し変える */
-# }
-
-# /* 相手のメッセージ用コンテナ (左寄せ) - デフォルトのflex */
-# .their-message-container {
-#      justify-content: flex-start; /* デフォルト */
-# }
-
-# /* 相手のメッセージバブル */
-# .their-message-bubble {
-#     background-color: #f0f0f0; /* 明るい灰色 (例) */
-#     color: black;
-#     border-bottom-left-radius: 5px; /* 左下の角を少し変える */
-# }
-
-# /* タイムスタンプのスタイル */
-# .timestamp {
-#     font-size: 0.75em; /* 小さく */
-#     color: grey;
-#     display: block; /* 改行して表示 */
-#     text-align: right; /* バブル内で右寄せ */
-#     margin-top: 5px;
-# }
-# </style>
-# """, unsafe_allow_html=True)
+/* タイムスタンプのスタイル */
+.timestamp {
+    font-size: 0.75em; /* 小さく */
+    color: grey;
+    display: block; /* 改行して表示 */
+    text-align: right; /* バブル内で右寄せ */
+    margin-top: 5px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
-# # --- アプリのタイトル ---
-# st.title("チャット (左右寄せ)")
+# --- アプリのタイトル ---
+st.title("チャット (左右寄せ)")
 
-# # --- 自分の役割を選択 ---
-# if 'my_role' not in st.session_state:
-#     st.session_state.my_role = None
+# --- 自分の役割を選択 ---
+if 'my_role' not in st.session_state:
+    st.session_state.my_role = None
 
-# if st.session_state.my_role is None:
-#     selected_role = st.radio(
-#         "あなたの役割を選択してください:",
-#         (AGENT, VISITOR),
-#         index=(0 if DEFAULT_ROLE == AGENT else 1),
-#         key="role_selector"
-#     )
-#     if st.button("チャット開始"):
-#         st.session_state.my_role = selected_role
-#         st.rerun()
-# else:
-#     my_role = st.session_state.my_role
-#     receiver_role = VISITOR if my_role == AGENT else AGENT
+if st.session_state.my_role is None:
+    selected_role = st.radio(
+        "あなたの役割を選択してください:",
+        (AGENT, VISITOR),
+        index=(0 if DEFAULT_ROLE == AGENT else 1),
+        key="role_selector"
+    )
+    if st.button("チャット開始"):
+        st.session_state.my_role = selected_role
+        st.rerun()
+else:
+    my_role = st.session_state.my_role
+    receiver_role = VISITOR if my_role == AGENT else AGENT
 
-#     st.info(f"あなたは **{my_role}** です。相手は **{receiver_role}** です。")
-#     if st.button("役割を再選択"):
-#         st.session_state.my_role = None
-#         st.rerun()
+    st.info(f"あなたは **{my_role}** です。相手は **{receiver_role}** です。")
+    if st.button("役割を再選択"):
+        st.session_state.my_role = None
+        st.rerun()
 
-#     # --- メッセージ履歴表示処理 ---
-#     try:
-#         jst = pytz.timezone('Asia/Tokyo')
-#         utc = pytz.utc
+    # --- メッセージ履歴表示処理 ---
+    try:
+        jst = pytz.timezone('Asia/Tokyo')
+        utc = pytz.utc
 
-#         # Firestoreからの読み込み (変更なし)
-#         # ... (query1, query2, データ取得・ソート) ...
-#         query1 = db.collection("messages").where(filter=firestore.And([firestore.FieldFilter("sender", "==", my_role),firestore.FieldFilter("receiver", "==", receiver_role)])).order_by("timestamp", direction=firestore.Query.ASCENDING)
-#         query2 = db.collection("messages").where(filter=firestore.And([firestore.FieldFilter("sender", "==", receiver_role),firestore.FieldFilter("receiver", "==", my_role)])).order_by("timestamp", direction=firestore.Query.ASCENDING)
-#         docs1 = list(query1.stream())
-#         docs2 = list(query2.stream())
-#         min_utc_time = datetime.datetime.min.replace(tzinfo=utc)
-#         all_docs_combined = []
-#         for doc in docs1 + docs2:
-#             doc_data = doc.to_dict()
-#             if 'timestamp' not in doc_data or doc_data['timestamp'] is None: doc_data['timestamp'] = min_utc_time
-#             all_docs_combined.append(doc_data)
-#         all_messages = sorted(all_docs_combined, key=lambda x: x.get('timestamp', min_utc_time))
+        # Firestoreからの読み込み (変更なし)
+        # ... (query1, query2, データ取得・ソート) ...
+        query1 = db.collection("messages").where(filter=firestore.And([firestore.FieldFilter("sender", "==", my_role),firestore.FieldFilter("receiver", "==", receiver_role)])).order_by("timestamp", direction=firestore.Query.ASCENDING)
+        query2 = db.collection("messages").where(filter=firestore.And([firestore.FieldFilter("sender", "==", receiver_role),firestore.FieldFilter("receiver", "==", my_role)])).order_by("timestamp", direction=firestore.Query.ASCENDING)
+        docs1 = list(query1.stream())
+        docs2 = list(query2.stream())
+        min_utc_time = datetime.datetime.min.replace(tzinfo=utc)
+        all_docs_combined = []
+        for doc in docs1 + docs2:
+            doc_data = doc.to_dict()
+            if 'timestamp' not in doc_data or doc_data['timestamp'] is None: doc_data['timestamp'] = min_utc_time
+            all_docs_combined.append(doc_data)
+        all_messages = sorted(all_docs_combined, key=lambda x: x.get('timestamp', min_utc_time))
 
 
-#         # --- カスタムHTML/CSSで履歴を表示 ---
-#         for msg in all_messages:
-#             sender = msg.get('sender', '不明')
-#             content = msg.get('content', '')
-#             ts_obj = msg.get('timestamp')
+        # --- カスタムHTML/CSSで履歴を表示 ---
+        for msg in all_messages:
+            sender = msg.get('sender', '不明')
+            content = msg.get('content', '')
+            ts_obj = msg.get('timestamp')
 
-#             timestamp_str_for_html = ""
-#             if isinstance(ts_obj, datetime.datetime):
-#                 if ts_obj.tzinfo is None: ts_obj = utc.localize(ts_obj)
-#                 ts_jst = ts_obj.astimezone(jst)
-#                 timestamp_str_for_html = f"<span class='timestamp'>{ts_jst.strftime('%H:%M')}</span>"
+            timestamp_str_for_html = ""
+            if isinstance(ts_obj, datetime.datetime):
+                if ts_obj.tzinfo is None: ts_obj = utc.localize(ts_obj)
+                ts_jst = ts_obj.astimezone(jst)
+                timestamp_str_for_html = f"<span class='timestamp'>{ts_jst.strftime('%H:%M')}</span>"
 
-#             # 自分のメッセージかどうかを判定
-#             is_mine = (sender == my_role)
+            # 自分のメッセージかどうかを判定
+            is_mine = (sender == my_role)
 
-#             # CSSクラスとコンテナクラスを決定
-#             container_class = "my-message-container" if is_mine else "their-message-container"
-#             bubble_class = "my-message-bubble" if is_mine else "their-message-bubble"
+            # CSSクラスとコンテナクラスを決定
+            container_class = "my-message-container" if is_mine else "their-message-container"
+            bubble_class = "my-message-bubble" if is_mine else "their-message-bubble"
 
-#             # HTMLを構築
-#             # 特殊文字をエスケープ (重要！)
-#             import html
-#             escaped_content = html.escape(content)
+            # HTMLを構築
+            # 特殊文字をエスケープ (重要！)
+            import html
+            escaped_content = html.escape(content)
 
-#             message_html = f"""
-#             <div class="message-container {container_class}">
-#                 <div class="message-bubble {bubble_class}">
-#                     {escaped_content}
-#                     {timestamp_str_for_html}
-#                 </div>
-#             </div>
-#             """
-#             # st.markdownでHTMLとしてレンダリング
-#             st.markdown(message_html, unsafe_allow_html=True)
+            message_html = f"""
+            <div class="message-container {container_class}">
+                <div class="message-bubble {bubble_class}">
+                    {escaped_content}
+                    {timestamp_str_for_html}
+                </div>
+            </div>
+            """
+            # st.markdownでHTMLとしてレンダリング
+            st.markdown(message_html, unsafe_allow_html=True)
 
-#     except Exception as e:
-#          # (エラー処理は変更なし)
-#          if "requires an index" in str(e).lower():
-#              st.error(f"メッセージの取得にエラーが発生しました。Firestoreでインデックスを作成する必要があります。")
-#              try:
-#                  url_match = re.search(r"(https?://\S+)", str(e))
-#                  if url_match:
-#                      st.markdown(f"こちらのリンクからインデックスを作成できます: [インデックス作成リンク]({url_match.group(1)})")
-#              except: pass
-#          else:
-#              st.error(f"メッセージの取得・表示中に予期せぬエラーが発生しました: {e}")
+    except Exception as e:
+         # (エラー処理は変更なし)
+         if "requires an index" in str(e).lower():
+             st.error(f"メッセージの取得にエラーが発生しました。Firestoreでインデックスを作成する必要があります。")
+             try:
+                 url_match = re.search(r"(https?://\S+)", str(e))
+                 if url_match:
+                     st.markdown(f"こちらのリンクからインデックスを作成できます: [インデックス作成リンク]({url_match.group(1)})")
+             except: pass
+         else:
+             st.error(f"メッセージの取得・表示中に予期せぬエラーが発生しました: {e}")
 
-#     # --- メッセージ入力 (st.chat_input) ---
-#     prompt = st.chat_input("メッセージを入力")
+    # --- メッセージ入力 (st.chat_input) ---
+    prompt = st.chat_input("メッセージを入力")
 
-#     if prompt:
-#         try:
-#             doc_ref = db.collection("messages").document()
-#             doc_ref.set({
-#                 'sender': my_role,
-#                 'receiver': receiver_role,
-#                 'content': prompt,
-#                 'timestamp': datetime.datetime.now(tz=datetime.timezone.utc)
-#             })
-#             st.rerun()
-#         except Exception as e:
-#             st.error(f"メッセージの送信に失敗しました: {e}")
+    if prompt:
+        try:
+            doc_ref = db.collection("messages").document()
+            doc_ref.set({
+                'sender': my_role,
+                'receiver': receiver_role,
+                'content': prompt,
+                'timestamp': datetime.datetime.now(tz=datetime.timezone.utc)
+            })
+            st.rerun()
+        except Exception as e:
+            st.error(f"メッセージの送信に失敗しました: {e}")
