@@ -4,7 +4,7 @@ steps:
   args: [
       'build',
       '-t',
-      # ↓↓↓ イメージ名を自分の環境に合わせて変更 ↓↓↓
+      # ↓↓↓ イメージ名を自分の環境に合わせる ↓↓↓
       'asia-northeast1-docker.pkg.dev/streamlit-chat-proto/streamlit-apps/chat-app:latest',
       '.' # Dockerfileがあるディレクトリ
     ]
