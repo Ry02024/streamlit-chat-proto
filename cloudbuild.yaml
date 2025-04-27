@@ -1,0 +1,49 @@
+steps:
+  # ステップ1: Docker イメージをビルド
+  # Dockerfile がある場所 ('.') を指定し、ビルドする
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+        'build',
+        '-t',
+        # ↓↓↓ イメージ名を自分の環境に合わせて変更 ↓↓↓
+        'asia-northeast1-docker.pkg.dev/$PROJECT_ID/streamlit-apps/chat-app:latest',
+        '.'
+      ]
+    id: 'Build'
+
+  # ステップ2: ビルドしたイメージを Artifact Registry にプッシュ
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/streamlit-apps/chat-app:latest']
+    id: 'Push'
+    waitFor: ['Build'] # Build ステップの完了を待つ
+
+  # ステップ3: Cloud Run にデプロイ
+  # google/cloud-sdk:latest イメージを使って gcloud コマンドを実行
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:latest' # 公式のCloud SDKイメージ
+    entrypoint: gcloud
+    args: [
+        'run', 'deploy',
+        # ↓↓↓ Cloud Run サービス名を指定 ↓↓↓
+        'streamlit-chat',
+        # ↓↓↓ ビルドしたイメージ名を指定 ↓↓↓
+        '--image=asia-northeast1-docker.pkg.dev/$PROJECT_ID/streamlit-apps/chat-app:latest',
+        # ↓↓↓ リージョンを指定 ↓↓↓
+        '--region=asia-northeast1',
+        '--platform=managed',
+        '--allow-unauthenticated', # 未認証アクセスを許可
+        # ↓↓↓ Secret Managerからマウントする設定 ↓↓↓
+        # '--set-secrets=/[コンテナ内パス]=[Secret名]:[バージョン]',
+        '--set-secrets=/secrets/sa-key.json=firestore-sa-key:latest',
+        # ↓↓↓ 環境変数を設定 ↓↓↓
+        # '--set-env-vars=[環境変数名]=[値]',
+        '--set-env-vars=GOOGLE_APPLICATION_CREDENTIALS=/secrets/sa-key.json',
+        # ↓↓↓ スケーリング設定 (無料枠向け) ↓↓↓
+        '--min-instances=0',
+        '--max-instances=1'
+      ]
+    id: 'Deploy'
+    waitFor: ['Push'] # Push ステップの完了を待つ
+
+# ビルド成果物としてイメージを指定
+images:
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/streamlit-apps/chat-app:latest'
