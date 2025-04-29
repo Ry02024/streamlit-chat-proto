@@ -2,7 +2,7 @@ import streamlit as st
 import chat  # チャット機能をインポート
 
 # 許可するメールアドレスのリスト
-allowed_emails = ["tan0ry0@gmail.com", "tan0ry02024@example.com"]
+allowed_emails = ["tan0ry0@gmail.com", "tan0ry02024@gmail.com"]
 
 # サイドバーにアプリ情報を表示
 st.sidebar.title("チャットアプリ")
