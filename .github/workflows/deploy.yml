@@ -27,6 +27,18 @@ jobs:
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
+      - name: Generate secrets.toml
+        run: |
+          mkdir -p .streamlit
+          cat <<EOF > .streamlit/secrets.toml
+          [auth]
+          redirect_uri = "https://your-app-url/oauth2callback"
+          cookie_secret = "${{ secrets.COOKIE_SECRET }}"
+          client_id = "${{ secrets.CLIENT_ID }}"
+          client_secret = "${{ secrets.CLIENT_SECRET }}"
+          server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
+          EOF
+
       - name: Configure Docker
         run: |
           gcloud auth configure-docker ${{ secrets.REGION }}-docker.pkg.dev --quiet
