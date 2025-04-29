@@ -32,7 +32,7 @@ jobs:
           mkdir -p .streamlit
           cat <<EOF > .streamlit/secrets.toml
           [auth]
-          redirect_uri = "https://your-app-url/oauth2callback"
+          redirect_uri = "https://streamlit-app-1098493834184.asia-northeast1.run.app/oauth2callback"
           cookie_secret = "${{ secrets.COOKIE_SECRET }}"
           client_id = "${{ secrets.CLIENT_ID }}"
           client_secret = "${{ secrets.CLIENT_SECRET }}"
