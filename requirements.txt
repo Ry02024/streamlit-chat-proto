@@ -4,3 +4,4 @@ pytz
 streamlit-local-storage
 uuid
 pandas
+Authlib
